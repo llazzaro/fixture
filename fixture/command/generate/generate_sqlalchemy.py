@@ -70,7 +70,16 @@ class TableEnv(object):
         for name, o in getitems():
             if isinstance(o, Table):
                 self.add_table(o, name=name, module=module)
-    
+            if self._is_sa_mapped(o):
+                self.add_table(o.__table__, name=o.__tablename__, module=module)
+
+    def _is_sa_mapped(self, cls):
+        try:
+            sqlalchemy.orm.util.class_mapper(cls)
+            return True
+        except:
+            return False
+
     def add_table(self, table_obj, name=None, module=None):
         if not name:
             # sqlalchemy 0.4 and ??
@@ -121,8 +130,8 @@ class SQLAlchemyHandler(DataHandler):
                 self.connection.raw_connection().set_isolation_level(
                         psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
             ################################################
-        
-        Session = scoped_session(sessionmaker(autoflush=True, transactional=False, bind=self.engine))
+
+        Session = scoped_session(sessionmaker(autoflush=True, bind=self.engine))
         self.session = Session()
         
         self.env = TableEnv(*[self.obj.__module__] + self.options.env)
@@ -178,13 +187,13 @@ class SQLAlchemyHandler(DataHandler):
 class SQLAlchemyMappedClassBase(SQLAlchemyHandler):
     class RecordSetAdapter(SQLAlchemyHandler.RecordSetAdapter):
         def __init__(self, obj):
-            self.columns = obj.c
-            
+            self.columns = obj.__table__.columns
+
             # could grab this from the Handler :
-            from sqlalchemy.orm.mapper import object_mapper
+            from sqlalchemy.orm import object_mapper
             self.mapper = object_mapper(obj())
-            
-            if self.mapper.local_table:
+
+            if self.mapper.local_table is not None:
                 self.table = self.mapper.local_table
             elif self.mapper.select_table:
                 self.table = self.mapper.select_table
@@ -203,8 +212,8 @@ class SQLAlchemyMappedClassBase(SQLAlchemyHandler):
         
         from sqlalchemy.orm.mapper import class_mapper
         self.mapper = class_mapper(self.obj)
-        
-        if self.mapper.local_table:
+
+        if self.mapper.local_table is not None:
             self.table = self.mapper.local_table
         elif self.mapper.select_table:
             self.table = self.mapper.select_table
@@ -328,7 +337,6 @@ class SQLAlchemyFixtureSet(FixtureSet):
     """a fixture set for a sqlalchemy record set."""
     
     def __init__(self, data, obj, connection, env, adapter=None):
-        # print data, model
         FixtureSet.__init__(self, data)
         self.env = env
         self.connection = connection
