@@ -71,7 +71,7 @@ class TableEnv(object):
             if isinstance(o, Table):
                 self.add_table(o, name=name, module=module)
             if self._is_sa_mapped(o):
-                self.add_table(o.__table__, name=o.__tablename__, module=module)
+                self.add_table(o.__table__, name=o.__name__, module=module)
 
     def _is_sa_mapped(self, cls):
         try:
@@ -350,12 +350,16 @@ class SQLAlchemyFixtureSet(FixtureSet):
         self.primary_key = None
         
         self.data_dict = {}
-        for col in self.obj.columns:
+        if getattr(self.obj, 'mapper', False):
+            columns = self.obj.mapper.columns._data
+        else:
+            columns = {col.name: col for col in self.obj.columns}
+
+        for col_name, col in columns.iteritems():
             sendkw = {}
             for fk in col.foreign_keys:
                 sendkw['foreign_key'] = fk
-                
-            val = self.get_col_value(col.name, **sendkw)
+            val = self.get_col_value(col_name, **sendkw)
             self.data_dict[col.name] = val
     
     def attr_to_db_col(self, col):
